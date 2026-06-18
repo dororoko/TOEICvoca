@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>영단어 자동 재생</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', sans-serif;
+    background: #0f0f1a;
+    color: #fff;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  .container {
+    width: 100%;
+    max-width: 600px;
+    padding: 24px;
+    text-align: center;
+  }
+  .status {
+    font-size: 13px;
+    color: #888;
+    margin-bottom: 32px;
+    min-height: 20px;
+  }
+  .card {
+    background: linear-gradient(135deg, #1e1e3a, #2a1a4a);
+    border: 1px solid #3a2a6a;
+    border-radius: 24px;
+    padding: 48px 40px;
+    margin-bottom: 32px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    min-height: 320px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+  .pos-badge {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    background: #4a2a8a;
+    color: #c9a0ff;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 12px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .word-number {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    color: #555;
+    font-size: 12px;
+  }
+  .spelling {
+    font-size: 64px;
+    font-weight: 700;
+    letter-spacing: -2px;
+    color: #fff;
+    margin-bottom: 16px;
+    line-height: 1.1;
+    white-space: nowrap;
+    max-width: 100%;
+  }
+  .ipa {
+    font-size: 22px;
+    color: #a78bfa;
+    margin-bottom: 20px;
+    font-style: italic;
+  }
+  .kr-pronunciation {
+    font-size: 16px;
+    color: #7c6fb0;
+    margin-bottom: 24px;
+  }
+  .meaning {
+    font-size: 20px;
+    color: #d1c4ff;
+    line-height: 1.5;
+    max-width: 400px;
+  }
+  .audio-icon {
+    font-size: 28px;
+    margin-bottom: 8px;
+    opacity: 0.5;
+    transition: opacity 0.3s;
+  }
+  .audio-icon.playing { opacity: 1; animation: pulse 0.8s infinite; }
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.2); }
+  }
+  .progress-bar {
+    width: 100%;
+    height: 4px;
+    background: #2a1a4a;
+    border-radius: 2px;
+    margin-bottom: 32px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #7c3aed, #a78bfa);
+    border-radius: 2px;
+    transition: width 0.1s linear;
+  }
+  .controls {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+  .btn {
+    background: #2a1a4a;
+    border: 1px solid #4a2a8a;
+    color: #c9a0ff;
+    border-radius: 50px;
+    padding: 12px 24px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .btn:hover { background: #3a2a6a; transform: scale(1.05); }
+  .btn-main {
+    background: linear-gradient(135deg, #7c3aed, #a855f7);
+    border: none;
+    color: #fff;
+    padding: 14px 32px;
+    font-size: 16px;
+    font-weight: 600;
+  }
+  .btn-main:hover { opacity: 0.9; transform: scale(1.05); }
+  .btn-icon { width: 44px; height: 44px; padding: 0; justify-content: center; font-size: 18px; }
+  .counter {
+    font-size: 12px;
+    color: #555;
+    margin-top: 12px;
+  }
+  .loading {
+    color: #a78bfa;
+    font-size: 16px;
+  }
+  .error { color: #f87171; font-size: 14px; }
+  .speed-controls {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    margin-top: 12px;
+  }
+  .speed-btn {
+    background: transparent;
+    border: 1px solid #3a2a6a;
+    color: #888;
+    border-radius: 20px;
+    padding: 6px 14px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .speed-btn.active {
+    background: #4a2a8a;
+    color: #c9a0ff;
+    border-color: #7c3aed;
+  }
+  .speed-btn:hover { border-color: #7c3aed; }
+  .volume-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 16px;
+  }
+  .volume-row span { font-size: 16px; color: #888; }
+  .volume-row input[type="range"] {
+    -webkit-appearance: none;
+    width: 140px;
+    height: 4px;
+    background: #2a1a4a;
+    border-radius: 2px;
+    outline: none;
+  }
+  .volume-row input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #a78bfa;
+    cursor: pointer;
+  }
+  .volume-row input[type="range"]::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #a78bfa;
+    border: none;
+    cursor: pointer;
+  }
+  .audio-source {
+    font-size: 11px;
+    color: #555;
+    margin-top: 12px;
+    min-height: 16px;
+    letter-spacing: 0.5px;
+  }
+  .meaning.hidden-meaning {
+    filter: blur(8px);
+    user-select: none;
+    transition: filter 0.3s;
+  }
+  .meaning {
+    transition: filter 0.3s;
+  }
+  .option-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 16px;
+    font-size: 13px;
+    color: #aaa;
+  }
+  .option-row input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: #a78bfa;
+    cursor: pointer;
+  }
+  .option-row label { cursor: pointer; }
+  .sheet-link-btn {
+    background: transparent;
+    border: 1px solid #3a2a6a;
+    color: #888;
+    border-radius: 20px;
+    padding: 8px 18px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-top: 16px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .sheet-link-btn:hover { border-color: #7c3aed; color: #c9a0ff; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="status" id="status">스프레드시트 불러오는 중...</div>
+
+  <div class="card" id="card">
+    <div class="loading">⏳ 단어 데이터를 불러오고 있어요...</div>
+  </div>
+
+  <div class="progress-bar">
+    <div class="progress-fill" id="progress" style="width:0%"></div>
+  </div>
+
+  <div class="controls">
+    <button class="btn btn-icon" id="prevBtn" onclick="prevWord()" title="이전 단어">⬅</button>
+    <button class="btn btn-main" id="playBtn" onclick="togglePlay()">▶ 시작</button>
+    <button class="btn btn-icon" id="nextBtn" onclick="nextWord()" title="다음 단어">➡</button>
+  </div>
+  <div class="speed-controls">
+    <button class="speed-btn" data-sec="3" onclick="setInterval_(3)">3초</button>
+    <button class="speed-btn active" data-sec="5" onclick="setInterval_(5)">5초</button>
+    <button class="speed-btn" data-sec="8" onclick="setInterval_(8)">8초</button>
+    <button class="speed-btn" data-sec="10" onclick="setInterval_(10)">10초</button>
+  </div>
+  <div class="volume-row">
+    <span>🔈</span>
+    <input type="range" id="volumeSlider" min="0" max="100" value="30" oninput="setVolume(this.value)">
+    <span>🔊</span>
+  </div>
+  <div class="option-row">
+    <input type="checkbox" id="hideMeaningCheck" onchange="onHideMeaningToggle(this.checked)">
+    <label for="hideMeaningCheck">단어 뜻 가리기 (다음 단어 1초 전 표시)</label>
+  </div>
+  <div class="counter" id="counter"></div>
+  <button class="sheet-link-btn" onclick="openSheet()">📊 스프레드시트로 바로 가기</button>
+</div>
+
+<script>
+const SHEET_ID = '1THexNEpg2h7CnceWDumdRNYziQzq3B9ptwzKLFO7hvQ';
+
+let words = [];
+let usedIndices = [];
+let history = [];      // 재생된 word index 기록 (이전 단어 이동용)
+let historyPos = -1;   // history 내 현재 위치
+let nextIdx = null;    // 미리 정해둔 다음 단어 index
+let isPlaying = false;
+let timer = null;
+let progressTimer = null;
+let revealTimer = null;
+let progressVal = 0;
+let INTERVAL = 5000;
+let currentVolume = 0.3;
+let hideMeaning = false;
+
+function setVolume(val) {
+  currentVolume = val / 100;
+}
+
+function onHideMeaningToggle(checked) {
+  hideMeaning = checked;
+  const el = document.querySelector('.meaning');
+  if (!el) return;
+  if (hideMeaning) {
+    el.classList.add('hidden-meaning');
+  } else {
+    el.classList.remove('hidden-meaning');
+  }
+}
+
+function openSheet() {
+  window.open(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit`, '_blank');
+}
+
+function setInterval_(sec) {
+  INTERVAL = sec * 1000;
+  document.querySelectorAll('.speed-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector(`.speed-btn[data-sec="${sec}"]`).classList.add('active');
+  if (isPlaying) {
+    clearTimeout(timer);
+    clearInterval(progressTimer);
+    startAutoPlay();
+  }
+}
+
+// ===== 구글 시트 로드 (JSONP) =====
+window.handleSheetData = function(data) {
+  try {
+    const allRows = data.table.rows;
+    if (!allRows || allRows.length === 0) throw new Error('데이터 행이 없어요.');
+
+    const headerRow = allRows[0].c;
+    const cols = headerRow.map(c => String(c?.v ?? '').trim().toLowerCase());
+    const dataRows = allRows.slice(1);
+
+    const findCol = (key) => cols.findIndex(c => c.includes(key));
+    const colMap = {
+      spelling: findCol('스펠링') >= 0 ? findCol('스펠링') : findCol('spelling'),
+      pos: findCol('품사'),
+      meaning: findCol('뜻'),
+      ipa: findCol('ipa'),
+      krPron: findCol('한국어 발음') >= 0 ? findCol('한국어 발음') : findCol('발음')
+    };
+
+    if (colMap.spelling < 0) throw new Error('스펠링 컬럼을 찾을 수 없어요. 컬럼: ' + cols.join(', '));
+
+    words = dataRows.map(r => {
+      const get = (idx) => idx >= 0 ? (r.c[idx]?.v ?? '') : '';
+      return {
+        spelling: String(get(colMap.spelling)).trim(),
+        pos: String(get(colMap.pos)).trim(),
+        meaning: String(get(colMap.meaning)).trim(),
+        ipa: String(get(colMap.ipa)).trim(),
+        krPron: String(get(colMap.krPron)).trim(),
+      };
+    }).filter(w => w.spelling);
+
+    if (words.length === 0) throw new Error('단어 데이터가 없어요.');
+
+    document.getElementById('status').textContent = `✅ ${words.length}개 단어 로드 완료`;
+    document.getElementById('counter').textContent = `총 ${words.length}개 단어`;
+
+    // 첫 단어 표시 + 다음 단어 프리로딩
+    const firstIdx = getRandomIndex();
+    showWord(firstIdx, true);
+  } catch(e) {
+    showLoadError(e.message);
+  }
+};
+
+function loadSheet() {
+  const script = document.createElement('script');
+  script.src = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json;responseHandler:handleSheetData&gid=0`;
+  script.onerror = () => showLoadError('스크립트 로드 실패 (네트워크 또는 권한 문제)');
+  document.body.appendChild(script);
+
+  setTimeout(() => {
+    if (words.length === 0 && !document.getElementById('status').textContent.includes('✅')) {
+      showLoadError('응답 없음 (10초 초과)');
+    }
+  }, 10000);
+}
+
+function showLoadError(msg) {
+  document.getElementById('status').innerHTML = `<span class="error">❌ 불러오기 실패</span>`;
+  document.getElementById('card').innerHTML = `
+    <div class="error" style="text-align:left; font-size:13px; line-height:1.8;">
+      <b>스프레드시트를 불러올 수 없어요.</b><br><br>
+      오류: ${msg}<br><br>
+      <small>
+      확인할 사항:<br>
+      1. 공유 설정 → "링크가 있는 모든 사용자" → <b>뷰어</b><br>
+      2. 단어 데이터가 <b>첫 번째 시트(탭)</b>에 있는지<br>
+      3. 헤더 행에 "스펠링", "품사", "뜻", "IPA", "한국어 발음" 컬럼명이 있는지
+      </small>
+    </div>`;
+}
+
+// ===== 단어 선택 =====
+function getRandomIndex() {
+  if (usedIndices.length >= words.length) usedIndices = [];
+  let idx;
+  do { idx = Math.floor(Math.random() * words.length); }
+  while (usedIndices.includes(idx) && words.length > 1);
+  usedIndices.push(idx);
+  return idx;
+}
+
+// ===== 오디오 프리로딩 =====
+// preloadCache: word -> Promise<{type:'dict'|'gtts', audioEl}>
+const preloadCache = {};
+
+function fetchWithTimeout(url, ms) {
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), ms);
+  return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(t));
+}
+
+function getGoogleTTSUrl(word) {
+  return `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(word)}&tl=en&client=tw-ob`;
+}
+
+function preloadWord(word) {
+  if (preloadCache[word]) return preloadCache[word];
+  preloadCache[word] = (async () => {
+    try {
+      const res = await fetchWithTimeout(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`, 2500);
+      const data = await res.json();
+      const phonetics = data[0]?.phonetics || [];
+      const audioUrl = phonetics.find(p => p.audio)?.audio || null;
+      if (audioUrl) {
+        const audioEl = new Audio();
+        audioEl.preload = 'auto';
+        audioEl.src = audioUrl;
+        audioEl.load();
+        return { type: 'dict', audioEl };
+      }
+    } catch (e) { /* fallthrough to gtts */ }
+
+    const audioEl = new Audio();
+    audioEl.preload = 'auto';
+    audioEl.src = getGoogleTTSUrl(word);
+    audioEl.load();
+    return { type: 'gtts', audioEl };
+  })();
+  return preloadCache[word];
+}
+
+// ===== 음성 재생 =====
+function getBestVoice() {
+  const voices = window.speechSynthesis.getVoices();
+  return voices.find(v => v.name.includes('Google') && v.lang.startsWith('en'))
+    || voices.find(v => v.lang === 'en-US' && v.name.toLowerCase().includes('natural'))
+    || voices.find(v => v.lang === 'en-US')
+    || voices.find(v => v.lang.startsWith('en'));
+}
+if ('speechSynthesis' in window) {
+  window.speechSynthesis.getVoices();
+  window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+}
+
+function setSourceLabel(text) {
+  const el = document.getElementById('audioSource');
+  if (el) el.textContent = text;
+}
+
+function playBrowserTTS(word, icon) {
+  try {
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(word);
+    utter.lang = 'en-US';
+    utter.rate = 0.9;
+    utter.volume = currentVolume;
+    const voice = getBestVoice();
+    if (voice) utter.voice = voice;
+    utter.onend = () => { if (icon) icon.classList.remove('playing'); };
+    utter.onerror = () => { if (icon) icon.classList.remove('playing'); };
+    window.speechSynthesis.speak(utter);
+    setSourceLabel('브라우저 내장 TTS 사용');
+  } catch {
+    if (icon) icon.classList.remove('playing');
+  }
+}
+
+async function playWord(word) {
+  const icon = document.getElementById('audioIcon');
+  if (icon) icon.classList.add('playing');
+  setSourceLabel('⏳ 음성 준비 중...');
+
+  let entry;
+  try {
+    entry = await preloadWord(word);
+  } catch {
+    playBrowserTTS(word, icon);
+    return;
+  }
+
+  const audioEl = entry.audioEl;
+  audioEl.volume = currentVolume;
+  try { audioEl.currentTime = 0; } catch {}
+
+  audioEl.onended = () => { if (icon) icon.classList.remove('playing'); };
+  audioEl.onerror = () => {
+    if (entry.type === 'dict') {
+      // dict 오디오 실패 -> gtts로 즉시 폴백
+      const fallback = new Audio(getGoogleTTSUrl(word));
+      fallback.volume = currentVolume;
+      fallback.onended = () => { if (icon) icon.classList.remove('playing'); };
+      fallback.onerror = () => { if (icon) icon.classList.remove('playing'); playBrowserTTS(word, icon); };
+      fallback.play().then(() => setSourceLabel('Google Translate TTS 사용')).catch(() => playBrowserTTS(word, icon));
+    } else {
+      if (icon) icon.classList.remove('playing');
+      playBrowserTTS(word, icon);
+    }
+  };
+
+  audioEl.play()
+    .then(() => setSourceLabel(entry.type === 'dict' ? 'Dictionary API 원어민 음성 사용' : 'Google Translate TTS 사용'))
+    .catch(() => playBrowserTTS(word, icon));
+}
+
+// ===== 영단어 글씨 크기 자동 조절 =====
+// 길이에 따라 단계적으로 글씨 크기를 줄여 줄바꿈/잘림을 방지
+const SPELLING_SIZE_STEPS = [64, 52, 42, 34, 28, 22, 18];
+
+function adjustSpellingSize() {
+  const el = document.querySelector('.spelling');
+  const card = document.getElementById('card');
+  if (!el || !card) return;
+
+  const available = card.clientWidth - 80; // 카드 좌우 패딩 고려
+  let stepIdx = 0;
+  el.style.fontSize = SPELLING_SIZE_STEPS[stepIdx] + 'px';
+
+  // 강제 리플로우 후 측정, 닿으면 다음 단계로 축소
+  while (el.scrollWidth > available && stepIdx < SPELLING_SIZE_STEPS.length - 1) {
+    stepIdx++;
+    el.style.fontSize = SPELLING_SIZE_STEPS[stepIdx] + 'px';
+  }
+
+  // 그래도 넘치면 줄바꿈 허용 (최후의 수단)
+  if (el.scrollWidth > available) {
+    el.style.whiteSpace = 'normal';
+  } else {
+    el.style.whiteSpace = 'nowrap';
+  }
+}
+
+window.addEventListener('resize', adjustSpellingSize);
+function renderWordInfo(w) {
+  document.getElementById('card').innerHTML = `
+    <div class="pos-badge">${w.pos || '—'}</div>
+    <div class="word-number">#${historyPos + 1} / ${words.length}</div>
+    <div class="audio-icon" id="audioIcon">🔊</div>
+    <div class="spelling">${w.spelling}</div>
+    ${w.ipa ? `<div class="ipa">${w.ipa}</div>` : ''}
+    ${w.krPron ? `<div class="kr-pronunciation">[ ${w.krPron} ]</div>` : ''}
+    ${w.meaning ? `<div class="meaning${hideMeaning ? ' hidden-meaning' : ''}">${w.meaning}</div>` : ''}
+    <div class="audio-source" id="audioSource"></div>
+  `;
+  adjustSpellingSize();
+}
+
+// idx: 표시할 단어의 인덱스. isInitial: 최초 호출 여부
+function showWord(idx, isInitial) {
+  // 히스토리 관리
+  if (isInitial) {
+    history = [idx];
+    historyPos = 0;
+  } else {
+    // 새로운 단어로 진행 -> 현재 위치 이후 기록 제거하고 추가
+    history = history.slice(0, historyPos + 1);
+    history.push(idx);
+    historyPos = history.length - 1;
+  }
+
+  renderWordInfo(words[idx]);
+  playWord(words[idx].spelling);
+
+  // 다음에 보여줄 랜덤 단어를 미리 정하고 프리로딩
+  nextIdx = getRandomIndex();
+  preloadWord(words[nextIdx].spelling);
+}
+
+function startProgress() {
+  clearInterval(progressTimer);
+  clearTimeout(revealTimer);
+  progressVal = 0;
+  document.getElementById('progress').style.width = '0%';
+  progressTimer = setInterval(() => {
+    progressVal += 100 / (INTERVAL / 100);
+    if (progressVal >= 100) progressVal = 100;
+    document.getElementById('progress').style.width = progressVal + '%';
+  }, 100);
+
+  // 다음 단어로 넘어가기 1초 전, 뜻 다시 보이기
+  if (hideMeaning) {
+    const revealDelay = Math.max(INTERVAL - 1000, 0);
+    revealTimer = setTimeout(() => {
+      const el = document.querySelector('.meaning');
+      if (el) el.classList.remove('hidden-meaning');
+    }, revealDelay);
+  }
+}
+
+function togglePlay() {
+  if (words.length === 0) return;
+  isPlaying = !isPlaying;
+  const btn = document.getElementById('playBtn');
+  if (isPlaying) {
+    btn.textContent = '⏸ 일시정지';
+    startAutoPlay();
+  } else {
+    btn.textContent = '▶ 재생';
+    clearTimeout(timer);
+    clearInterval(progressTimer);
+    clearTimeout(revealTimer);
+  }
+}
+
+function startAutoPlay() {
+  startProgress();
+  timer = setTimeout(() => {
+    if (!isPlaying) return;
+    goToNext();
+    startAutoPlay();
+  }, INTERVAL);
+}
+
+// 미리 정해둔(프리로딩된) 다음 단어로 이동
+function goToNext() {
+  clearTimeout(timer);
+  clearInterval(progressTimer);
+  clearTimeout(revealTimer);
+  if (nextIdx === null) nextIdx = getRandomIndex();
+  showWord(nextIdx, false);
+}
+
+function nextWord() {
+  // 사용자가 수동으로 다음 단어 요청 (앞으로 진행한 기록이 있으면 그것을 사용)
+  if (historyPos < history.length - 1) {
+    clearTimeout(timer);
+    clearInterval(progressTimer);
+    clearTimeout(revealTimer);
+    historyPos++;
+    const idx = history[historyPos];
+    renderWordInfo(words[idx]);
+    playWord(words[idx].spelling);
+  } else {
+    goToNext();
+  }
+  if (isPlaying) startAutoPlay();
+}
+
+function prevWord() {
+  if (historyPos <= 0) return;
+  clearTimeout(timer);
+  clearInterval(progressTimer);
+  clearTimeout(revealTimer);
+  historyPos--;
+  const idx = history[historyPos];
+  renderWordInfo(words[idx]);
+  playWord(words[idx].spelling);
+  if (isPlaying) startAutoPlay();
+}
+
+loadSheet();
+</script>
+</body>
+</html>
