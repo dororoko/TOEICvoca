@@ -7,7 +7,7 @@
 <!--
   ============================================
   영단어 자동 재생 학습 도구
-  Version: 1.6.0
+  Version: 1.7.0
   Last updated: 2026-06-20
   Changelog:
     1.0.0 - 최초 버전 (랜덤 단어 + Dictionary API 발음)
@@ -20,9 +20,11 @@
     1.5.2 - 영단어 자동 폰트 크기 축소, 기본 볼륨 30%
     1.6.0 - Google TTS 엔드포인트를 translate.googleapis.com으로 교체,
             프리로드 단계에서 재생 가능 여부 사전 테스트
+    1.7.0 - Google TTS를 Cloudflare Workers 프록시 경유로 변경
+            (GitHub Pages 등 외부 Origin에서의 차단 우회)
   ============================================
 -->
-<script>console.log('%c영단어 자동 재생 v1.6.0', 'color:#a78bfa;font-weight:bold;');</script>
+<script>console.log('%c영단어 자동 재생 v1.7.0', 'color:#a78bfa;font-weight:bold;');</script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -452,10 +454,9 @@ function fetchWithTimeout(url, ms) {
   return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(t));
 }
 
-// 비공식 Google TTS 엔드포인트 (googleapis.com 서브도메인 - translate.google.com/translate_tts 대비 살아있는 경우가 많음)
-// 단, 공식 API가 아니므로 언제든 중단/차단될 수 있음
+// Google TTS 프록시 (Cloudflare Workers - Origin 제약 우회)
 function getGoogleTTSUrl(word) {
-  return `https://translate.googleapis.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(word)}&tl=en&client=gtx`;
+  return `https://toeicvoka.dororoko.workers.dev/?q=${encodeURIComponent(word)}&tl=en`;
 }
 
 function testAudioLoadable(url, ms) {
