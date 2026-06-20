@@ -4,6 +4,25 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>영단어 자동 재생</title>
+<!--
+  ============================================
+  영단어 자동 재생 학습 도구
+  Version: 1.6.0
+  Last updated: 2026-06-20
+  Changelog:
+    1.0.0 - 최초 버전 (랜덤 단어 + Dictionary API 발음)
+    1.1.0 - CORS 우회를 위해 JSONP(gviz) 방식으로 전환
+    1.2.0 - 헤더 행을 데이터에서 직접 읽도록 수정
+    1.3.0 - 발음 캐싱, 타임아웃 폴백, TTS 폴백 추가
+    1.4.0 - Google TTS 우선 사용, 볼륨/음성출처 표시 추가
+    1.5.0 - 오디오 프리로딩(현재+다음 단어), 히스토리 기반 이전/다음
+    1.5.1 - 볼륨 기본값, 뜻 가리기 옵션, 시트 바로가기 버튼
+    1.5.2 - 영단어 자동 폰트 크기 축소, 기본 볼륨 30%
+    1.6.0 - Google TTS 엔드포인트를 translate.googleapis.com으로 교체,
+            프리로드 단계에서 재생 가능 여부 사전 테스트
+  ============================================
+-->
+<script>console.log('%c영단어 자동 재생 v1.6.0', 'color:#a78bfa;font-weight:bold;');</script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
