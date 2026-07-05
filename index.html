@@ -594,10 +594,11 @@ function playWordAudio(word, onEnd) {
       return;
     }
     const el = entry.audioEl;
+    currentAudioEl = el;
     el.volume = currentVolume;
     try { el.currentTime = 0; } catch {}
-    el.onended = finish;
-    el.onerror = () => playBrowserTTS(word, finish);
+    el.onended = () => { currentAudioEl = null; finish(); };
+    el.onerror = () => { currentAudioEl = null; playBrowserTTS(word, finish); };
     el.play()
       .then(() => setSourceLabel(entry.type === 'dict' ? 'Dictionary API 원어민 음성' : 'Google Translate TTS'))
       .catch(() => playBrowserTTS(word, finish));
@@ -615,10 +616,11 @@ function playExampleAudio(text, onEnd) {
 
   preloadExample(text).then(audioEl => {
     if (!audioEl) { playBrowserTTS(text, finish); return; }
+    currentAudioEl = audioEl;
     audioEl.volume = currentVolume;
     try { audioEl.currentTime = 0; } catch {}
-    audioEl.onended = finish;
-    audioEl.onerror = () => playBrowserTTS(text, finish);
+    audioEl.onended = () => { currentAudioEl = null; finish(); };
+    audioEl.onerror = () => { currentAudioEl = null; playBrowserTTS(text, finish); };
     audioEl.play()
       .then(() => setSourceLabel('예문 Google Translate TTS'))
       .catch(() => playBrowserTTS(text, finish));
@@ -661,11 +663,23 @@ function startWaitCountdown(onDone) {
   }, waitSeconds * 1000);
 }
 
+let currentAudioEl = null; // 현재 재생 중인 Audio 엘리먼트 추적
+
+function stopAllAudio() {
+  window.speechSynthesis?.cancel();
+  if (currentAudioEl) {
+    currentAudioEl.pause();
+    currentAudioEl.onended = null;
+    currentAudioEl.onerror = null;
+    currentAudioEl = null;
+  }
+}
+
 function stopTimers() {
   clearInterval(countdownTimer);
   clearTimeout(waitTimer);
   clearTimeout(revealTimer);
-  window.speechSynthesis?.cancel();
+  stopAllAudio();
   document.getElementById('countdown').textContent = '';
   document.getElementById('progress').style.width = '0%';
 }
