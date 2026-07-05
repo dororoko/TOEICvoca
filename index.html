@@ -3,12 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>영단어 자동 재생</title>
 <!--
   ============================================
   영단어 자동 재생 학습 도구
-  Version: 1.7.0
-  Last updated: 2026-06-20
+  Version: 1.8.0
+  Last updated: 2026-07-05
   Changelog:
     1.0.0 - 최초 버전 (랜덤 단어 + Dictionary API 발음)
     1.1.0 - CORS 우회를 위해 JSONP(gviz) 방식으로 전환
@@ -18,13 +17,14 @@
     1.5.0 - 오디오 프리로딩(현재+다음 단어), 히스토리 기반 이전/다음
     1.5.1 - 볼륨 기본값, 뜻 가리기 옵션, 시트 바로가기 버튼
     1.5.2 - 영단어 자동 폰트 크기 축소, 기본 볼륨 30%
-    1.6.0 - Google TTS 엔드포인트를 translate.googleapis.com으로 교체,
-            프리로드 단계에서 재생 가능 여부 사전 테스트
+    1.6.0 - Google TTS 엔드포인트를 translate.googleapis.com으로 교체
     1.7.0 - Google TTS를 Cloudflare Workers 프록시 경유로 변경
-            (GitHub Pages 등 외부 Origin에서의 차단 우회)
+    1.8.0 - 예문/예문 한국어 해석 추가, 타이머를 TTS 완료 후 N초 방식으로 변경,
+            예문 읽기 토글, 1~10초 대기 시간 조절
   ============================================
 -->
-<script>console.log('%c영단어 자동 재생 v1.7.0', 'color:#a78bfa;font-weight:bold;');</script>
+<script>console.log('%c영단어 자동 재생 v1.8.0', 'color:#a78bfa;font-weight:bold;');</script>
+<title>영단어 자동 재생</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -39,24 +39,24 @@
   }
   .container {
     width: 100%;
-    max-width: 600px;
+    max-width: 640px;
     padding: 24px;
     text-align: center;
   }
   .status {
     font-size: 13px;
     color: #888;
-    margin-bottom: 32px;
+    margin-bottom: 24px;
     min-height: 20px;
   }
   .card {
     background: linear-gradient(135deg, #1e1e3a, #2a1a4a);
     border: 1px solid #3a2a6a;
     border-radius: 24px;
-    padding: 48px 40px;
-    margin-bottom: 32px;
+    padding: 40px 36px 32px;
+    margin-bottom: 24px;
     box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-    min-height: 320px;
+    min-height: 300px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -88,45 +88,99 @@
     font-weight: 700;
     letter-spacing: -2px;
     color: #fff;
-    margin-bottom: 16px;
+    margin-bottom: 12px;
     line-height: 1.1;
     white-space: nowrap;
     max-width: 100%;
   }
   .ipa {
-    font-size: 22px;
+    font-size: 20px;
     color: #a78bfa;
-    margin-bottom: 20px;
+    margin-bottom: 12px;
     font-style: italic;
   }
   .kr-pronunciation {
-    font-size: 16px;
+    font-size: 15px;
     color: #7c6fb0;
-    margin-bottom: 24px;
+    margin-bottom: 16px;
   }
   .meaning {
-    font-size: 20px;
+    font-size: 19px;
     color: #d1c4ff;
     line-height: 1.5;
-    max-width: 400px;
+    max-width: 480px;
+    margin-bottom: 0;
+    transition: filter 0.3s;
+  }
+  .meaning.hidden-meaning {
+    filter: blur(8px);
+    user-select: none;
+  }
+  /* 예문 영역 */
+  .example-wrap {
+    margin-top: 20px;
+    width: 100%;
+    border-top: 1px solid #3a2a6a;
+    padding-top: 16px;
+    text-align: left;
+  }
+  .example-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: #6a5a9a;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .example-en {
+    font-size: 15px;
+    color: #c9b8ff;
+    line-height: 1.6;
+    margin-bottom: 6px;
+  }
+  .example-ko {
+    font-size: 13px;
+    color: #7c6fb0;
+    line-height: 1.5;
+    transition: filter 0.3s;
+  }
+  .example-ko.hidden-meaning {
+    filter: blur(8px);
+    user-select: none;
+  }
+  .example-playing {
+    animation: exPulse 1s infinite;
+  }
+  @keyframes exPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
   }
   .audio-icon {
-    font-size: 28px;
-    margin-bottom: 8px;
+    font-size: 26px;
+    margin-bottom: 10px;
     opacity: 0.5;
     transition: opacity 0.3s;
+    cursor: pointer;
   }
   .audio-icon.playing { opacity: 1; animation: pulse 0.8s infinite; }
   @keyframes pulse {
     0%, 100% { transform: scale(1); }
     50% { transform: scale(1.2); }
   }
+  /* 대기 카운트다운 */
+  .countdown {
+    font-size: 12px;
+    color: #6a5a9a;
+    margin-bottom: 20px;
+    min-height: 18px;
+    letter-spacing: 0.5px;
+  }
   .progress-bar {
     width: 100%;
     height: 4px;
     background: #2a1a4a;
     border-radius: 2px;
-    margin-bottom: 32px;
+    margin-bottom: 28px;
     overflow: hidden;
   }
   .progress-fill {
@@ -140,7 +194,7 @@
     gap: 16px;
     justify-content: center;
     align-items: center;
-    margin-bottom: 20px;
+    margin-bottom: 16px;
   }
   .btn {
     background: #2a1a4a;
@@ -166,65 +220,86 @@
   }
   .btn-main:hover { opacity: 0.9; transform: scale(1.05); }
   .btn-icon { width: 44px; height: 44px; padding: 0; justify-content: center; font-size: 18px; }
-  .counter {
-    font-size: 12px;
-    color: #555;
-    margin-top: 12px;
-  }
-  .loading {
-    color: #a78bfa;
-    font-size: 16px;
-  }
-  .error { color: #f87171; font-size: 14px; }
-  .speed-controls {
+  .options-grid {
     display: flex;
-    gap: 8px;
-    justify-content: center;
+    flex-direction: column;
+    gap: 10px;
     margin-top: 12px;
   }
-  .speed-btn {
-    background: transparent;
-    border: 1px solid #3a2a6a;
-    color: #888;
-    border-radius: 20px;
-    padding: 6px 14px;
-    font-size: 12px;
+  .option-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #aaa;
+  }
+  .option-row input[type="checkbox"] {
+    width: 16px; height: 16px;
+    accent-color: #a78bfa;
     cursor: pointer;
-    transition: all 0.2s;
   }
-  .speed-btn.active {
-    background: #4a2a8a;
+  .option-row label { cursor: pointer; }
+  /* 대기 시간 슬라이더 */
+  .wait-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    justify-content: center;
+    font-size: 13px;
+    color: #aaa;
+  }
+  .wait-row input[type="range"] {
+    -webkit-appearance: none;
+    width: 120px;
+    height: 4px;
+    background: #2a1a4a;
+    border-radius: 2px;
+    outline: none;
+  }
+  .wait-row input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: #a78bfa;
+    cursor: pointer;
+  }
+  .wait-row input[type="range"]::-moz-range-thumb {
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: #a78bfa;
+    border: none;
+    cursor: pointer;
+  }
+  .wait-val {
+    min-width: 28px;
     color: #c9a0ff;
-    border-color: #7c3aed;
+    font-weight: 600;
+    font-size: 13px;
   }
-  .speed-btn:hover { border-color: #7c3aed; }
   .volume-row {
     display: flex;
     align-items: center;
     gap: 10px;
     justify-content: center;
-    margin-top: 16px;
   }
   .volume-row span { font-size: 16px; color: #888; }
   .volume-row input[type="range"] {
     -webkit-appearance: none;
-    width: 140px;
-    height: 4px;
+    width: 140px; height: 4px;
     background: #2a1a4a;
     border-radius: 2px;
     outline: none;
   }
   .volume-row input[type="range"]::-webkit-slider-thumb {
     -webkit-appearance: none;
-    width: 14px;
-    height: 14px;
+    width: 14px; height: 14px;
     border-radius: 50%;
     background: #a78bfa;
     cursor: pointer;
   }
   .volume-row input[type="range"]::-moz-range-thumb {
-    width: 14px;
-    height: 14px;
+    width: 14px; height: 14px;
     border-radius: 50%;
     background: #a78bfa;
     border: none;
@@ -233,34 +308,15 @@
   .audio-source {
     font-size: 11px;
     color: #555;
-    margin-top: 12px;
+    margin-top: 10px;
     min-height: 16px;
     letter-spacing: 0.5px;
   }
-  .meaning.hidden-meaning {
-    filter: blur(8px);
-    user-select: none;
-    transition: filter 0.3s;
+  .counter {
+    font-size: 12px;
+    color: #555;
+    margin-top: 10px;
   }
-  .meaning {
-    transition: filter 0.3s;
-  }
-  .option-row {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    margin-top: 16px;
-    font-size: 13px;
-    color: #aaa;
-  }
-  .option-row input[type="checkbox"] {
-    width: 16px;
-    height: 16px;
-    accent-color: #a78bfa;
-    cursor: pointer;
-  }
-  .option-row label { cursor: pointer; }
   .sheet-link-btn {
     background: transparent;
     border: 1px solid #3a2a6a;
@@ -270,12 +326,14 @@
     font-size: 12px;
     cursor: pointer;
     transition: all 0.2s;
-    margin-top: 16px;
+    margin-top: 14px;
     display: inline-flex;
     align-items: center;
     gap: 6px;
   }
   .sheet-link-btn:hover { border-color: #7c3aed; color: #c9a0ff; }
+  .loading { color: #a78bfa; font-size: 16px; }
+  .error { color: #f87171; font-size: 14px; }
 </style>
 </head>
 <body>
@@ -286,79 +344,80 @@
     <div class="loading">⏳ 단어 데이터를 불러오고 있어요...</div>
   </div>
 
+  <div class="countdown" id="countdown"></div>
+
   <div class="progress-bar">
     <div class="progress-fill" id="progress" style="width:0%"></div>
   </div>
 
   <div class="controls">
-    <button class="btn btn-icon" id="prevBtn" onclick="prevWord()" title="이전 단어">⬅</button>
+    <button class="btn btn-icon" onclick="prevWord()" title="이전 단어">⬅</button>
     <button class="btn btn-main" id="playBtn" onclick="togglePlay()">▶ 시작</button>
-    <button class="btn btn-icon" id="nextBtn" onclick="nextWord()" title="다음 단어">➡</button>
+    <button class="btn btn-icon" onclick="nextWord()" title="다음 단어">➡</button>
   </div>
-  <div class="speed-controls">
-    <button class="speed-btn" data-sec="3" onclick="setInterval_(3)">3초</button>
-    <button class="speed-btn active" data-sec="5" onclick="setInterval_(5)">5초</button>
-    <button class="speed-btn" data-sec="8" onclick="setInterval_(8)">8초</button>
-    <button class="speed-btn" data-sec="10" onclick="setInterval_(10)">10초</button>
+
+  <div class="options-grid">
+    <div class="volume-row">
+      <span>🔈</span>
+      <input type="range" id="volumeSlider" min="0" max="100" value="30" oninput="setVolume(this.value)">
+      <span>🔊</span>
+    </div>
+    <div class="wait-row">
+      <span>⏱ 대기</span>
+      <input type="range" id="waitSlider" min="1" max="10" value="5" oninput="setWait(this.value)">
+      <span class="wait-val" id="waitVal">5초</span>
+    </div>
+    <div class="option-row">
+      <input type="checkbox" id="hideMeaningCheck" onchange="onHideMeaningToggle(this.checked)">
+      <label for="hideMeaningCheck">단어/예문 뜻 가리기 (TTS 완료 전 표시)</label>
+    </div>
+    <div class="option-row">
+      <input type="checkbox" id="readExampleCheck" onchange="readExample = this.checked">
+      <label for="readExampleCheck">예문 읽기</label>
+    </div>
   </div>
-  <div class="volume-row">
-    <span>🔈</span>
-    <input type="range" id="volumeSlider" min="0" max="100" value="30" oninput="setVolume(this.value)">
-    <span>🔊</span>
-  </div>
-  <div class="option-row">
-    <input type="checkbox" id="hideMeaningCheck" onchange="onHideMeaningToggle(this.checked)">
-    <label for="hideMeaningCheck">단어 뜻 가리기 (다음 단어 1초 전 표시)</label>
-  </div>
+
+  <div class="audio-source" id="audioSource"></div>
   <div class="counter" id="counter"></div>
   <button class="sheet-link-btn" onclick="openSheet()">📊 스프레드시트로 바로 가기</button>
 </div>
 
 <script>
 const SHEET_ID = '1THexNEpg2h7CnceWDumdRNYziQzq3B9ptwzKLFO7hvQ';
+const PROXY_URL = 'https://toeicvoka.dororoko.workers.dev';
 
 let words = [];
 let usedIndices = [];
-let history = [];      // 재생된 word index 기록 (이전 단어 이동용)
-let historyPos = -1;   // history 내 현재 위치
-let nextIdx = null;    // 미리 정해둔 다음 단어 index
+let history = [];
+let historyPos = -1;
+let nextIdx = null;
 let isPlaying = false;
-let timer = null;
-let progressTimer = null;
+let waitTimer = null;
+let countdownTimer = null;
 let revealTimer = null;
-let progressVal = 0;
-let INTERVAL = 5000;
 let currentVolume = 0.3;
+let waitSeconds = 5;
 let hideMeaning = false;
+let readExample = false;
 
-function setVolume(val) {
-  currentVolume = val / 100;
+// ===== 설정 =====
+function setVolume(val) { currentVolume = val / 100; }
+
+function setWait(val) {
+  waitSeconds = parseInt(val);
+  document.getElementById('waitVal').textContent = val + '초';
 }
 
 function onHideMeaningToggle(checked) {
   hideMeaning = checked;
-  const el = document.querySelector('.meaning');
-  if (!el) return;
-  if (hideMeaning) {
-    el.classList.add('hidden-meaning');
-  } else {
-    el.classList.remove('hidden-meaning');
-  }
+  const meaning = document.querySelector('.meaning');
+  const exKo = document.querySelector('.example-ko');
+  if (meaning) hideMeaning ? meaning.classList.add('hidden-meaning') : meaning.classList.remove('hidden-meaning');
+  if (exKo) hideMeaning ? exKo.classList.add('hidden-meaning') : exKo.classList.remove('hidden-meaning');
 }
 
 function openSheet() {
   window.open(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit`, '_blank');
-}
-
-function setInterval_(sec) {
-  INTERVAL = sec * 1000;
-  document.querySelectorAll('.speed-btn').forEach(b => b.classList.remove('active'));
-  document.querySelector(`.speed-btn[data-sec="${sec}"]`).classList.add('active');
-  if (isPlaying) {
-    clearTimeout(timer);
-    clearInterval(progressTimer);
-    startAutoPlay();
-  }
 }
 
 // ===== 구글 시트 로드 (JSONP) =====
@@ -366,75 +425,61 @@ window.handleSheetData = function(data) {
   try {
     const allRows = data.table.rows;
     if (!allRows || allRows.length === 0) throw new Error('데이터 행이 없어요.');
-
-    const headerRow = allRows[0].c;
-    const cols = headerRow.map(c => String(c?.v ?? '').trim().toLowerCase());
+    const cols = allRows[0].c.map(c => String(c?.v ?? '').trim().toLowerCase());
     const dataRows = allRows.slice(1);
 
-    const findCol = (key) => cols.findIndex(c => c.includes(key));
+    const fc = (key) => cols.findIndex(c => c.includes(key));
     const colMap = {
-      spelling: findCol('스펠링') >= 0 ? findCol('스펠링') : findCol('spelling'),
-      pos: findCol('품사'),
-      meaning: findCol('뜻'),
-      ipa: findCol('ipa'),
-      krPron: findCol('한국어 발음') >= 0 ? findCol('한국어 발음') : findCol('발음')
+      spelling: fc('스펠링') >= 0 ? fc('스펠링') : fc('spelling'),
+      pos: fc('품사'), meaning: fc('뜻'), ipa: fc('ipa'),
+      krPron: fc('한국어 발음') >= 0 ? fc('한국어 발음') : fc('발음'),
+      exEn: fc('예문'),
+      exKo: fc('예문 한국어') >= 0 ? fc('예문 한국어') : fc('한국어 해석'),
     };
 
     if (colMap.spelling < 0) throw new Error('스펠링 컬럼을 찾을 수 없어요. 컬럼: ' + cols.join(', '));
 
     words = dataRows.map(r => {
-      const get = (idx) => idx >= 0 ? (r.c[idx]?.v ?? '') : '';
+      const g = (i) => i >= 0 ? String(r.c[i]?.v ?? '').trim() : '';
       return {
-        spelling: String(get(colMap.spelling)).trim(),
-        pos: String(get(colMap.pos)).trim(),
-        meaning: String(get(colMap.meaning)).trim(),
-        ipa: String(get(colMap.ipa)).trim(),
-        krPron: String(get(colMap.krPron)).trim(),
+        spelling: g(colMap.spelling), pos: g(colMap.pos),
+        meaning: g(colMap.meaning), ipa: g(colMap.ipa),
+        krPron: g(colMap.krPron), exEn: g(colMap.exEn), exKo: g(colMap.exKo),
       };
     }).filter(w => w.spelling);
 
     if (words.length === 0) throw new Error('단어 데이터가 없어요.');
-
     document.getElementById('status').textContent = `✅ ${words.length}개 단어 로드 완료`;
     document.getElementById('counter').textContent = `총 ${words.length}개 단어`;
 
-    // 첫 단어 표시 + 다음 단어 프리로딩
     const firstIdx = getRandomIndex();
     showWord(firstIdx, true);
-  } catch(e) {
-    showLoadError(e.message);
-  }
+  } catch(e) { showLoadError(e.message); }
 };
 
 function loadSheet() {
-  const script = document.createElement('script');
-  script.src = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json;responseHandler:handleSheetData&gid=0`;
-  script.onerror = () => showLoadError('스크립트 로드 실패 (네트워크 또는 권한 문제)');
-  document.body.appendChild(script);
-
+  const s = document.createElement('script');
+  s.src = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json;responseHandler:handleSheetData&gid=0`;
+  s.onerror = () => showLoadError('스크립트 로드 실패');
+  document.body.appendChild(s);
   setTimeout(() => {
-    if (words.length === 0 && !document.getElementById('status').textContent.includes('✅')) {
+    if (words.length === 0 && !document.getElementById('status').textContent.includes('✅'))
       showLoadError('응답 없음 (10초 초과)');
-    }
   }, 10000);
 }
 
 function showLoadError(msg) {
   document.getElementById('status').innerHTML = `<span class="error">❌ 불러오기 실패</span>`;
   document.getElementById('card').innerHTML = `
-    <div class="error" style="text-align:left; font-size:13px; line-height:1.8;">
-      <b>스프레드시트를 불러올 수 없어요.</b><br><br>
-      오류: ${msg}<br><br>
-      <small>
-      확인할 사항:<br>
-      1. 공유 설정 → "링크가 있는 모든 사용자" → <b>뷰어</b><br>
-      2. 단어 데이터가 <b>첫 번째 시트(탭)</b>에 있는지<br>
-      3. 헤더 행에 "스펠링", "품사", "뜻", "IPA", "한국어 발음" 컬럼명이 있는지
-      </small>
+    <div class="error" style="text-align:left;font-size:13px;line-height:1.8;">
+      <b>스프레드시트를 불러올 수 없어요.</b><br><br>오류: ${msg}<br><br>
+      <small>1. 공유 설정 → "링크가 있는 모든 사용자" → 뷰어<br>
+      2. 첫 번째 시트에 데이터가 있는지<br>
+      3. 헤더 행 컬럼명 확인</small>
     </div>`;
 }
 
-// ===== 단어 선택 =====
+// ===== 랜덤 인덱스 =====
 function getRandomIndex() {
   if (usedIndices.length >= words.length) usedIndices = [];
   let idx;
@@ -444,19 +489,17 @@ function getRandomIndex() {
   return idx;
 }
 
-// ===== 오디오 프리로딩 =====
-// preloadCache: word -> Promise<{type:'dict'|'gtts', audioEl}>
+// ===== 프리로딩 =====
 const preloadCache = {};
 
 function fetchWithTimeout(url, ms) {
-  const controller = new AbortController();
-  const t = setTimeout(() => controller.abort(), ms);
-  return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(t));
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  return fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(t));
 }
 
-// Google TTS 프록시 (Cloudflare Workers - Origin 제약 우회)
-function getGoogleTTSUrl(word) {
-  return `https://toeicvoka.dororoko.workers.dev/?q=${encodeURIComponent(word)}&tl=en`;
+function getGoogleTTSUrl(text) {
+  return `${PROXY_URL}/?q=${encodeURIComponent(text)}&tl=en`;
 }
 
 function testAudioLoadable(url, ms) {
@@ -464,9 +507,9 @@ function testAudioLoadable(url, ms) {
     const audio = new Audio();
     let done = false;
     const finish = (ok) => { if (!done) { done = true; resolve(ok ? audio : null); } };
-    const timer = setTimeout(() => finish(false), ms);
-    audio.oncanplaythrough = () => { clearTimeout(timer); finish(true); };
-    audio.onerror = () => { clearTimeout(timer); finish(false); };
+    const t = setTimeout(() => finish(false), ms);
+    audio.oncanplaythrough = () => { clearTimeout(t); finish(true); };
+    audio.onerror = () => { clearTimeout(t); finish(false); };
     audio.preload = 'auto';
     audio.src = url;
     audio.load();
@@ -476,54 +519,43 @@ function testAudioLoadable(url, ms) {
 function preloadWord(word) {
   if (preloadCache[word]) return preloadCache[word];
   preloadCache[word] = (async () => {
-    // 1순위: Dictionary API 원어민 음성
+    // 1순위: Dictionary API
     try {
       const res = await fetchWithTimeout(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`, 2500);
       const data = await res.json();
-      const phonetics = data[0]?.phonetics || [];
-      const audioUrl = phonetics.find(p => p.audio)?.audio || null;
-      if (audioUrl) {
-        const audioEl = new Audio();
-        audioEl.preload = 'auto';
-        audioEl.src = audioUrl;
-        audioEl.load();
-        return { type: 'dict', audioEl };
+      const url = data[0]?.phonetics?.find(p => p.audio)?.audio || null;
+      if (url) {
+        const el = new Audio(); el.preload = 'auto'; el.src = url; el.load();
+        return { type: 'dict', audioEl: el };
       }
-    } catch (e) { /* 다음 단계로 */ }
-
-    // 2순위: Google TTS (비공식, 실패 가능성 있어 사전 로드 테스트)
+    } catch {}
+    // 2순위: Google TTS 프록시
     const gAudio = await testAudioLoadable(getGoogleTTSUrl(word), 1800);
-    if (gAudio) {
-      return { type: 'gtts', audioEl: gAudio };
-    }
-
-    // 3순위: 브라우저 내장 TTS
+    if (gAudio) return { type: 'gtts', audioEl: gAudio };
     return { type: 'tts', audioEl: null };
   })();
   return preloadCache[word];
 }
 
-// ===== 음성 재생 (브라우저 내장 TTS 최적화) =====
-let cachedVoices = [];
+// 예문 TTS 프리로딩 (Google TTS 프록시만 사용)
+function preloadExample(text) {
+  if (!text) return Promise.resolve(null);
+  const key = 'ex:' + text;
+  if (preloadCache[key]) return preloadCache[key];
+  preloadCache[key] = testAudioLoadable(getGoogleTTSUrl(text), 2500);
+  return preloadCache[key];
+}
 
-function refreshVoices() {
-  cachedVoices = window.speechSynthesis.getVoices();
-}
-if ('speechSynthesis' in window) {
-  refreshVoices();
-  window.speechSynthesis.onvoiceschanged = refreshVoices;
-}
+// ===== 음성 재생 =====
+let cachedVoices = [];
+function refreshVoices() { cachedVoices = window.speechSynthesis.getVoices(); }
+if ('speechSynthesis' in window) { refreshVoices(); window.speechSynthesis.onvoiceschanged = refreshVoices; }
 
 function getBestVoice() {
   const voices = cachedVoices.length ? cachedVoices : window.speechSynthesis.getVoices();
-  // 우선순위: 고품질 온라인/Natural 음성 > 로컬 en-US > 기타 영어
-  const priorityNames = ['Google US English', 'Microsoft Aria Online', 'Microsoft Jenny Online', 'Samantha', 'Microsoft Zira Online'];
-  for (const name of priorityNames) {
-    const v = voices.find(v => v.name.includes(name));
-    if (v) return v;
-  }
-  return voices.find(v => v.lang === 'en-US' && /natural|online|neural/i.test(v.name))
-    || voices.find(v => v.lang === 'en-US' && !v.localService)
+  const names = ['Google US English', 'Microsoft Aria Online', 'Microsoft Jenny Online', 'Samantha'];
+  for (const n of names) { const v = voices.find(v => v.name.includes(n)); if (v) return v; }
+  return voices.find(v => v.lang === 'en-US' && !v.localService)
     || voices.find(v => v.lang === 'en-US')
     || voices.find(v => v.lang.startsWith('en'));
 }
@@ -533,90 +565,138 @@ function setSourceLabel(text) {
   if (el) el.textContent = text;
 }
 
-function playBrowserTTS(word, icon) {
+function playBrowserTTS(text, onEnd) {
   try {
     window.speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance(word);
-    utter.lang = 'en-US';
-    utter.rate = 0.92;
-    utter.pitch = 1.0;
-    utter.volume = currentVolume;
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'en-US'; u.rate = 0.92; u.pitch = 1.0; u.volume = currentVolume;
     const voice = getBestVoice();
-    if (voice) { utter.voice = voice; utter.lang = voice.lang; }
-    utter.onend = () => { if (icon) icon.classList.remove('playing'); };
-    utter.onerror = () => { if (icon) icon.classList.remove('playing'); };
-    // 일부 브라우저(Chrome)는 cancel 직후 speak가 씹히는 버그가 있어 약간의 지연
-    setTimeout(() => window.speechSynthesis.speak(utter), 30);
-    setSourceLabel('브라우저 내장 TTS 사용' + (voice ? ` (${voice.name})` : ''));
-  } catch {
-    if (icon) icon.classList.remove('playing');
-  }
+    if (voice) { u.voice = voice; u.lang = voice.lang; }
+    u.onend = onEnd; u.onerror = onEnd;
+    setTimeout(() => window.speechSynthesis.speak(u), 30);
+    setSourceLabel('브라우저 내장 TTS' + (voice ? ` (${voice.name})` : ''));
+  } catch { onEnd && onEnd(); }
 }
 
-async function playWord(word) {
+// 단어 발음 재생 → 완료 콜백
+function playWordAudio(word, onEnd) {
   const icon = document.getElementById('audioIcon');
   if (icon) icon.classList.add('playing');
-  setSourceLabel('⏳ 음성 준비 중...');
 
-  let entry;
-  try {
-    entry = await preloadWord(word);
-  } catch {
-    playBrowserTTS(word, icon);
-    return;
-  }
-
-  if (entry.type === 'tts' || !entry.audioEl) {
-    playBrowserTTS(word, icon);
-    return;
-  }
-
-  const audioEl = entry.audioEl;
-  audioEl.volume = currentVolume;
-  try { audioEl.currentTime = 0; } catch {}
-
-  const label = entry.type === 'dict' ? 'Dictionary API 원어민 음성 사용' : 'Google Translate TTS 사용';
-
-  audioEl.onended = () => { if (icon) icon.classList.remove('playing'); };
-  audioEl.onerror = () => {
+  const finish = () => {
     if (icon) icon.classList.remove('playing');
-    playBrowserTTS(word, icon);
+    onEnd && onEnd();
   };
 
-  audioEl.play()
-    .then(() => setSourceLabel(label))
-    .catch(() => playBrowserTTS(word, icon));
+  preloadWord(word).then(entry => {
+    if (entry.type === 'tts' || !entry.audioEl) {
+      playBrowserTTS(word, finish);
+      return;
+    }
+    const el = entry.audioEl;
+    el.volume = currentVolume;
+    try { el.currentTime = 0; } catch {}
+    el.onended = finish;
+    el.onerror = () => playBrowserTTS(word, finish);
+    el.play()
+      .then(() => setSourceLabel(entry.type === 'dict' ? 'Dictionary API 원어민 음성' : 'Google Translate TTS'))
+      .catch(() => playBrowserTTS(word, finish));
+  }).catch(() => playBrowserTTS(word, finish));
 }
 
-// ===== 영단어 글씨 크기 자동 조절 =====
-// 길이에 따라 단계적으로 글씨 크기를 줄여 줄바꿈/잘림을 방지
-const SPELLING_SIZE_STEPS = [64, 52, 42, 34, 28, 22, 18];
+// 예문 TTS 재생 → 완료 콜백
+function playExampleAudio(text, onEnd) {
+  const exEl = document.querySelector('.example-en');
+  if (exEl) exEl.classList.add('example-playing');
+  const finish = () => {
+    if (exEl) exEl.classList.remove('example-playing');
+    onEnd && onEnd();
+  };
+
+  preloadExample(text).then(audioEl => {
+    if (!audioEl) { playBrowserTTS(text, finish); return; }
+    audioEl.volume = currentVolume;
+    try { audioEl.currentTime = 0; } catch {}
+    audioEl.onended = finish;
+    audioEl.onerror = () => playBrowserTTS(text, finish);
+    audioEl.play()
+      .then(() => setSourceLabel('예문 Google Translate TTS'))
+      .catch(() => playBrowserTTS(text, finish));
+  }).catch(() => playBrowserTTS(text, finish));
+}
+
+// ===== 카운트다운 + 진행 바 (TTS 완료 후 N초) =====
+function startWaitCountdown(onDone) {
+  clearInterval(countdownTimer);
+  clearTimeout(waitTimer);
+
+  let remaining = waitSeconds;
+  const total = waitSeconds;
+  let elapsed = 0;
+
+  document.getElementById('progress').style.width = '0%';
+  document.getElementById('countdown').textContent = `다음 단어까지 ${remaining}초`;
+
+  // 뜻 가리기 모드: 카운트다운 시작 시 뜻 공개
+  if (hideMeaning) {
+    const meaning = document.querySelector('.meaning');
+    const exKo = document.querySelector('.example-ko');
+    if (meaning) meaning.classList.remove('hidden-meaning');
+    if (exKo) exKo.classList.remove('hidden-meaning');
+  }
+
+  countdownTimer = setInterval(() => {
+    elapsed += 0.1;
+    remaining = Math.max(0, waitSeconds - Math.floor(elapsed));
+    const pct = Math.min(100, (elapsed / total) * 100);
+    document.getElementById('progress').style.width = pct + '%';
+    document.getElementById('countdown').textContent = `다음 단어까지 ${remaining}초`;
+  }, 100);
+
+  waitTimer = setTimeout(() => {
+    clearInterval(countdownTimer);
+    document.getElementById('countdown').textContent = '';
+    document.getElementById('progress').style.width = '100%';
+    onDone && onDone();
+  }, waitSeconds * 1000);
+}
+
+function stopTimers() {
+  clearInterval(countdownTimer);
+  clearTimeout(waitTimer);
+  clearTimeout(revealTimer);
+  window.speechSynthesis?.cancel();
+  document.getElementById('countdown').textContent = '';
+  document.getElementById('progress').style.width = '0%';
+}
+
+// ===== 단어 렌더링 =====
+const SPELLING_STEPS = [64, 52, 42, 34, 28, 22, 18];
 
 function adjustSpellingSize() {
   const el = document.querySelector('.spelling');
   const card = document.getElementById('card');
   if (!el || !card) return;
-
-  const available = card.clientWidth - 80; // 카드 좌우 패딩 고려
-  let stepIdx = 0;
-  el.style.fontSize = SPELLING_SIZE_STEPS[stepIdx] + 'px';
-
-  // 강제 리플로우 후 측정, 닿으면 다음 단계로 축소
-  while (el.scrollWidth > available && stepIdx < SPELLING_SIZE_STEPS.length - 1) {
-    stepIdx++;
-    el.style.fontSize = SPELLING_SIZE_STEPS[stepIdx] + 'px';
+  const available = card.clientWidth - 80;
+  let i = 0;
+  el.style.fontSize = SPELLING_STEPS[i] + 'px';
+  el.style.whiteSpace = 'nowrap';
+  while (el.scrollWidth > available && i < SPELLING_STEPS.length - 1) {
+    i++;
+    el.style.fontSize = SPELLING_STEPS[i] + 'px';
   }
-
-  // 그래도 넘치면 줄바꿈 허용 (최후의 수단)
-  if (el.scrollWidth > available) {
-    el.style.whiteSpace = 'normal';
-  } else {
-    el.style.whiteSpace = 'nowrap';
-  }
+  if (el.scrollWidth > available) el.style.whiteSpace = 'normal';
 }
-
 window.addEventListener('resize', adjustSpellingSize);
+
 function renderWordInfo(w) {
+  const exHtml = w.exEn ? `
+    <div class="example-wrap">
+      <div class="example-label">Example</div>
+      <div class="example-en">${w.exEn}</div>
+      ${w.exKo ? `<div class="example-ko${hideMeaning ? ' hidden-meaning' : ''}">${w.exKo}</div>` : ''}
+    </div>` : '';
+
   document.getElementById('card').innerHTML = `
     <div class="pos-badge">${w.pos || '—'}</div>
     <div class="word-number">#${historyPos + 1} / ${words.length}</div>
@@ -625,112 +705,86 @@ function renderWordInfo(w) {
     ${w.ipa ? `<div class="ipa">${w.ipa}</div>` : ''}
     ${w.krPron ? `<div class="kr-pronunciation">[ ${w.krPron} ]</div>` : ''}
     ${w.meaning ? `<div class="meaning${hideMeaning ? ' hidden-meaning' : ''}">${w.meaning}</div>` : ''}
-    <div class="audio-source" id="audioSource"></div>
+    ${exHtml}
   `;
   adjustSpellingSize();
 }
 
-// idx: 표시할 단어의 인덱스. isInitial: 최초 호출 여부
+// ===== 단어 표시 + 재생 흐름 =====
 function showWord(idx, isInitial) {
-  // 히스토리 관리
-  if (isInitial) {
-    history = [idx];
-    historyPos = 0;
-  } else {
-    // 새로운 단어로 진행 -> 현재 위치 이후 기록 제거하고 추가
-    history = history.slice(0, historyPos + 1);
-    history.push(idx);
-    historyPos = history.length - 1;
-  }
+  if (isInitial) { history = [idx]; historyPos = 0; }
+  else { history = history.slice(0, historyPos + 1); history.push(idx); historyPos = history.length - 1; }
 
+  stopTimers();
+  setSourceLabel('');
   renderWordInfo(words[idx]);
-  playWord(words[idx].spelling);
 
-  // 다음에 보여줄 랜덤 단어를 미리 정하고 프리로딩
+  // 다음 단어 미리 결정 + 프리로딩
   nextIdx = getRandomIndex();
   preloadWord(words[nextIdx].spelling);
+  if (words[nextIdx].exEn) preloadExample(words[nextIdx].exEn);
+
+  if (isPlaying) startPlaySequence(words[idx]);
 }
 
-function startProgress() {
-  clearInterval(progressTimer);
-  clearTimeout(revealTimer);
-  progressVal = 0;
-  document.getElementById('progress').style.width = '0%';
-  progressTimer = setInterval(() => {
-    progressVal += 100 / (INTERVAL / 100);
-    if (progressVal >= 100) progressVal = 100;
-    document.getElementById('progress').style.width = progressVal + '%';
-  }, 100);
-
-  // 다음 단어로 넘어가기 1초 전, 뜻 다시 보이기
-  if (hideMeaning) {
-    const revealDelay = Math.max(INTERVAL - 1000, 0);
-    revealTimer = setTimeout(() => {
-      const el = document.querySelector('.meaning');
-      if (el) el.classList.remove('hidden-meaning');
-    }, revealDelay);
-  }
-}
-
-function togglePlay() {
-  if (words.length === 0) return;
-  isPlaying = !isPlaying;
-  const btn = document.getElementById('playBtn');
-  if (isPlaying) {
-    btn.textContent = '⏸ 일시정지';
-    startAutoPlay();
-  } else {
-    btn.textContent = '▶ 재생';
-    clearTimeout(timer);
-    clearInterval(progressTimer);
-    clearTimeout(revealTimer);
-  }
-}
-
-function startAutoPlay() {
-  startProgress();
-  timer = setTimeout(() => {
+// 재생 순서: 단어 발음 → (예문 TTS) → 카운트다운 → 다음 단어
+function startPlaySequence(w) {
+  playWordAudio(w.spelling, () => {
     if (!isPlaying) return;
-    goToNext();
-    startAutoPlay();
-  }, INTERVAL);
+
+    const afterAll = () => {
+      if (!isPlaying) return;
+      startWaitCountdown(() => {
+        if (!isPlaying) return;
+        goToNext();
+      });
+    };
+
+    if (readExample && w.exEn) {
+      playExampleAudio(w.exEn, afterAll);
+    } else {
+      afterAll();
+    }
+  });
 }
 
-// 미리 정해둔(프리로딩된) 다음 단어로 이동
 function goToNext() {
-  clearTimeout(timer);
-  clearInterval(progressTimer);
-  clearTimeout(revealTimer);
   if (nextIdx === null) nextIdx = getRandomIndex();
   showWord(nextIdx, false);
 }
 
+// ===== 컨트롤 =====
+function togglePlay() {
+  if (words.length === 0) return;
+  isPlaying = !isPlaying;
+  document.getElementById('playBtn').textContent = isPlaying ? '⏸ 일시정지' : '▶ 재생';
+  if (isPlaying) {
+    const w = words[history[historyPos]];
+    if (w) startPlaySequence(w);
+  } else {
+    stopTimers();
+  }
+}
+
 function nextWord() {
-  // 사용자가 수동으로 다음 단어 요청 (앞으로 진행한 기록이 있으면 그것을 사용)
+  stopTimers();
   if (historyPos < history.length - 1) {
-    clearTimeout(timer);
-    clearInterval(progressTimer);
-    clearTimeout(revealTimer);
     historyPos++;
-    const idx = history[historyPos];
-    renderWordInfo(words[idx]);
-    playWord(words[idx].spelling);
+    renderWordInfo(words[history[historyPos]]);
+    adjustSpellingSize();
+    if (isPlaying) startPlaySequence(words[history[historyPos]]);
   } else {
     goToNext();
   }
-  if (isPlaying) startAutoPlay();
 }
 
 function prevWord() {
   if (historyPos <= 0) return;
-  clearTimeout(timer);
-  clearInterval(progressTimer);
-  clearTimeout(revealTimer);
+  stopTimers();
   historyPos--;
-  const idx = history[historyPos];
-  renderWordInfo(words[idx]);
-  playWord(words[idx].spelling);
-  if (isPlaying) startAutoPlay();
+  renderWordInfo(words[history[historyPos]]);
+  adjustSpellingSize();
+  if (isPlaying) startPlaySequence(words[history[historyPos]]);
 }
 
 loadSheet();
