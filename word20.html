@@ -160,17 +160,15 @@ const TODAY_COUNT = 20;
 // ===== 날짜 시드로 오늘의 20개 인덱스 뽑기 =====
 function getTodayIndices(totalCount) {
   const now = new Date();
-  const seed = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
-  let s = seed + 1;
-  const rng = () => { s = Math.imul(48271, s) | 0; return (s >>> 0) / 0x80000000; };
-
-  const available = [...Array(totalCount).keys()];
-  const count = Math.min(TODAY_COUNT, totalCount);
-  for (let i = 0; i < count; i++) {
-    const j = i + Math.floor(rng() * (available.length - i));
-    [available[i], available[j]] = [available[j], available[i]];
+  const day = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+  console.log('getTodayIndices 실행됨. day:', day, 'totalCount:', totalCount);
+  const picked = [];
+  for (let i = 0; picked.length < Math.min(TODAY_COUNT, totalCount); i++) {
+    const idx = (day + i * 31) % totalCount;
+    if (!picked.includes(idx)) picked.push(idx);
   }
-  return available.slice(0, count); // 예: [302, 192, 45, ...]
+  console.log('picked:', JSON.stringify(picked));
+  return picked;
 }
 
 // 날짜 표시
