@@ -6,41 +6,36 @@
 <!--
   ============================================
   영단어 자동 재생 학습 도구 - 오늘의 20단어
-  Version: 1.0.0
-  Last updated: 2026-08-03
+  Version: 1.1.0
+  Last updated: 2026-08-04
   Changelog:
     1.0.0 - vocab_player v1.8.0 기반, 날짜 시드로 뽑은 20단어만 순환
+    1.1.0 - 재생 순서 고정 (1→2→...→20 순환), 단어장 출력(JPG) 기능 추가
   ============================================
 -->
-<script>console.log('%c오늘의 20단어 v1.0.0', 'color:#a78bfa;font-weight:bold;');</script>
+<script>console.log('%c오늘의 20단어 v1.1.0', 'color:#a78bfa;font-weight:bold;');</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <title>오늘의 20단어</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     font-family: 'Segoe UI', sans-serif;
-    background: #0f0f1a;
-    color: #fff;
+    background: #0f0f1a; color: #fff;
     min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
   }
   .container { width: 100%; max-width: 640px; padding: 24px; text-align: center; }
   .status { font-size: 13px; color: #888; margin-bottom: 24px; min-height: 20px; }
   .date-label { font-size: 14px; color: #6a5a9a; margin-bottom: 8px; letter-spacing: 0.5px; }
   .card {
     background: linear-gradient(135deg, #1e1e3a, #2a1a4a);
-    border: 1px solid #3a2a6a;
-    border-radius: 24px;
-    padding: 40px 36px 32px;
-    margin-bottom: 24px;
+    border: 1px solid #3a2a6a; border-radius: 24px;
+    padding: 40px 36px 32px; margin-bottom: 24px;
     box-shadow: 0 20px 60px rgba(0,0,0,0.5);
     min-height: 300px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
     position: relative;
   }
   .pos-badge {
@@ -127,6 +122,9 @@
     <button class="btn btn-main" id="playBtn" onclick="togglePlay()">▶ 시작</button>
     <button class="btn btn-icon" onclick="nextWord()">➡</button>
   </div>
+  <div style="display:flex;gap:10px;justify-content:center;margin-top:12px;">
+    <button class="btn" id="printBtn" onclick="printWordList()">🖼 단어장 출력</button>
+  </div>
   <div class="options-grid">
     <div class="volume-row">
       <span>🔈</span>
@@ -157,6 +155,15 @@ const SHEET_ID = '1THexNEpg2h7CnceWDumdRNYziQzq3B9ptwzKLFO7hvQ';
 const PROXY_URL = 'https://toeicvoka.dororoko.workers.dev';
 const TODAY_COUNT = 20;
 
+// ===== 날짜 표시 =====
+function setDateLabel() {
+  const now = new Date();
+  document.getElementById('dateLabel').textContent =
+    `📅 ${now.getFullYear()}년 ${now.getMonth()+1}월 ${now.getDate()}일 오늘의 ${TODAY_COUNT}단어`;
+}
+setDateLabel();
+
+// ===== 날짜 시드로 오늘의 20개 인덱스 뽑기 =====
 function getTodayIndices(totalCount) {
   const now = new Date();
   const day = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
@@ -170,20 +177,11 @@ function getTodayIndices(totalCount) {
   return picked;
 }
 
-// 날짜 표시
-function setDateLabel() {
-  const now = new Date();
-  const label = `📅 ${now.getFullYear()}년 ${now.getMonth()+1}월 ${now.getDate()}일 오늘의 ${TODAY_COUNT}단어`;
-  document.getElementById('dateLabel').textContent = label;
-}
-setDateLabel();
-
 // ===== 전역 상태 =====
-let allWords = [];       // 전체 단어 (건드리지 않음)
-let todayWords = [];     // 오늘의 20단어 (allWords의 부분집합)
-let usedIndices = [];
-let currentPos = 0;  // 현재 순서 위치    // todayWords 기준 사용된 인덱스
-let history = [];        // todayWords 기준 방문 인덱스 기록
+let allWords = [];
+let todayWords = [];
+let currentPos = 0;  // 순서 고정 위치
+let history = [];
 let historyPos = -1;
 let nextIdx = null;
 let isPlaying = false;
@@ -198,9 +196,8 @@ function setWait(v) { waitSeconds = parseInt(v); document.getElementById('waitVa
 function openSheet() { window.open(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit`, '_blank'); }
 function onHideMeaningToggle(checked) {
   hideMeaning = checked;
-  const m = document.querySelector('.meaning'), k = document.querySelector('.example-ko');
-  if (m) m.classList.toggle('hidden-meaning', checked);
-  if (k) k.classList.toggle('hidden-meaning', checked);
+  document.querySelector('.meaning')?.classList.toggle('hidden-meaning', checked);
+  document.querySelector('.example-ko')?.classList.toggle('hidden-meaning', checked);
 }
 
 // ===== 시트 로드 =====
@@ -221,22 +218,15 @@ window.handleSheetData = function(data) {
 
     allWords = allRows.slice(1).map(r => {
       const g = i => i >= 0 ? String(r.c[i]?.v ?? '').trim() : '';
-      return {
-        spelling: g(cm.spelling), pos: g(cm.pos), meaning: g(cm.meaning),
-        ipa: g(cm.ipa), krPron: g(cm.krPron), exEn: g(cm.exEn), exKo: g(cm.exKo)
-      };
+      return { spelling: g(cm.spelling), pos: g(cm.pos), meaning: g(cm.meaning),
+               ipa: g(cm.ipa), krPron: g(cm.krPron), exEn: g(cm.exEn), exKo: g(cm.exKo) };
     }).filter(w => w.spelling);
 
     if (!allWords.length) throw new Error('단어 데이터가 없어요.');
 
-    // 디버그: 실제 값 콘솔 출력
     const indices = getTodayIndices(allWords.length);
-    console.log('allWords.length:', allWords.length);
-    console.log('indices:', indices);
-    console.log('indices[0]:', indices[0], '→ allWords[indices[0]]:', allWords[indices[0]]);
     todayWords = indices.map(i => allWords[i]);
 
-    // todayWords 정상 여부 검증
     if (!todayWords.length) throw new Error('오늘의 단어를 추출하지 못했어요.');
     todayWords.forEach((w, i) => {
       if (!w || typeof w.spelling === 'undefined') throw new Error(`todayWords[${i}]가 비정상이에요.`);
@@ -245,8 +235,6 @@ window.handleSheetData = function(data) {
     document.getElementById('status').textContent = `✅ 전체 ${allWords.length}개 중 오늘의 ${todayWords.length}단어`;
     document.getElementById('counter').textContent = `오늘의 ${todayWords.length}단어`;
 
-    // usedIndices 초기화 후 첫 단어
-    usedIndices = [];
     currentPos = 0;
     history = [];
     historyPos = -1;
@@ -270,7 +258,7 @@ function loadSheet() {
   }, 10000);
 }
 
-// ===== 랜덤 인덱스 (todayWords 기준, 순서 고정) =====
+// ===== 순서 고정 인덱스 =====
 function getNextIndex() {
   const idx = currentPos % todayWords.length;
   currentPos++;
@@ -386,8 +374,8 @@ function startWaitCountdown(onDone) {
   }
   countdownTimer = setInterval(() => {
     elapsed += 0.1;
-    document.getElementById('progress').style.width = Math.min(100,(elapsed/waitSeconds)*100)+'%';
-    document.getElementById('countdown').textContent = `다음 단어까지 ${Math.max(0,waitSeconds-Math.floor(elapsed))}초`;
+    document.getElementById('progress').style.width=Math.min(100,(elapsed/waitSeconds)*100)+'%';
+    document.getElementById('countdown').textContent=`다음 단어까지 ${Math.max(0,waitSeconds-Math.floor(elapsed))}초`;
   }, 100);
   waitTimer = setTimeout(() => {
     clearInterval(countdownTimer);
@@ -446,15 +434,9 @@ function showWord(idx, isInitial) {
   else { history=history.slice(0,historyPos+1); history.push(idx); historyPos=history.length-1; }
   stopTimers(); setSourceLabel('');
   renderWordInfo(todayWords[idx]);
-
-  // 다음 단어 순서대로 프리로딩
   nextIdx = getNextIndex();
   const nw = todayWords[nextIdx];
-  if (nw) {
-    preloadWord(nw.spelling);
-    if (nw.exEn) preloadExample(nw.exEn);
-  }
-
+  if (nw) { preloadWord(nw.spelling); if (nw.exEn) preloadExample(nw.exEn); }
   if (isPlaying) startPlaySequence(todayWords[idx]);
 }
 
@@ -499,6 +481,66 @@ function prevWord() {
   stopTimers(); historyPos--;
   renderWordInfo(todayWords[history[historyPos]]); adjustSpellingSize();
   if (isPlaying) startPlaySequence(todayWords[history[historyPos]]);
+}
+
+// ===== 단어장 출력 (JPG) =====
+async function printWordList() {
+  if (!todayWords.length) { alert('단어를 먼저 불러와주세요.'); return; }
+  const btn = document.getElementById('printBtn');
+  btn.textContent = '⏳ 생성 중...'; btn.disabled = true;
+
+  const now = new Date();
+  const dateStr = `${now.getFullYear()}년 ${now.getMonth()+1}월 ${now.getDate()}일`;
+
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'position:fixed;left:-9999px;top:0;width:720px;background:#0f0f1a;padding:40px;font-family:Segoe UI,sans-serif;box-sizing:border-box;';
+
+  // 헤더
+  const header = `
+    <div style="text-align:center;margin-bottom:28px;">
+      <div style="color:#a78bfa;font-size:22px;font-weight:700;margin-bottom:6px;">📅 오늘의 20단어</div>
+      <div style="color:#555;font-size:14px;">${dateStr}</div>
+    </div>`;
+
+  // 2단 테이블
+  const colHeader = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;">
+      <div style="background:#1a1a30;color:#a78bfa;font-size:12px;font-weight:700;padding:10px 20px;border-bottom:2px solid #3a2a6a;border-right:1px solid #2a1a4a;letter-spacing:1px;">영단어 / 품사</div>
+      <div style="background:#1a1a30;color:#a78bfa;font-size:12px;font-weight:700;padding:10px 20px;border-bottom:2px solid #3a2a6a;letter-spacing:1px;">한국어 뜻</div>
+    </div>`;
+
+  const rows = todayWords.map((w, i) => {
+    const bg = i % 2 === 0 ? '#13132a' : '#0f0f1a';
+    return `
+      <div style="display:grid;grid-template-columns:1fr 1fr;background:${bg};border-bottom:1px solid #1e1e3a;">
+        <div style="padding:12px 20px;border-right:1px solid #2a1a4a;display:flex;align-items:center;gap:8px;">
+          <span style="color:#e0d0ff;font-size:17px;font-weight:600;">${w.spelling}</span>
+          ${w.pos ? `<span style="color:#6a5a9a;font-size:12px;">${w.pos}</span>` : ''}
+        </div>
+        <div style="padding:12px 20px;display:flex;align-items:center;">
+          <span style="color:#b0a0e0;font-size:15px;">${w.meaning || '—'}</span>
+        </div>
+      </div>`;
+  }).join('');
+
+  const footer = `<div style="text-align:center;margin-top:20px;color:#3a2a6a;font-size:12px;">TOEIC Vocabulary Player</div>`;
+
+  wrap.innerHTML = header + colHeader + rows + footer;
+  document.body.appendChild(wrap);
+
+  try {
+    const canvas = await html2canvas(wrap, { backgroundColor: '#0f0f1a', scale: 2, useCORS: true, logging: false });
+    const a = document.createElement('a');
+    a.download = `오늘의20단어_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}.jpg`;
+    a.href = canvas.toDataURL('image/jpeg', 0.95);
+    a.click();
+  } catch(e) {
+    alert('JPG 생성 실패: ' + e.message);
+  } finally {
+    document.body.removeChild(wrap);
+    btn.textContent = '🖼 단어장 출력';
+    btn.disabled = false;
+  }
 }
 
 loadSheet();
