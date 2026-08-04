@@ -160,15 +160,17 @@ const TODAY_COUNT = 20;
 // ===== 날짜 시드로 오늘의 20개 인덱스 뽑기 =====
 function getTodayIndices(totalCount) {
   const now = new Date();
-  const day = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
-  console.log('getTodayIndices 실행됨. day:', day, 'totalCount:', totalCount);
-  const picked = [];
-  for (let i = 0; picked.length < Math.min(TODAY_COUNT, totalCount); i++) {
-    const idx = (day + i * 31) % totalCount;
-    if (!picked.includes(idx)) picked.push(idx);
+  const seed = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+  let s = seed + 1;
+  const rng = () => { s = Math.imul(48271, s) | 0; return (s >>> 0) / 0x80000000; };
+
+  const available = [...Array(totalCount).keys()];
+  const count = Math.min(TODAY_COUNT, totalCount);
+  for (let i = 0; i < count; i++) {
+    const j = i + Math.floor(rng() * (available.length - i));
+    [available[i], available[j]] = [available[j], available[i]];
   }
-  console.log('picked:', JSON.stringify(picked));
-  return picked;
+  return available.slice(0, count); // 예: [302, 192, 45, ...]
 }
 
 // 날짜 표시
@@ -182,7 +184,8 @@ setDateLabel();
 // ===== 전역 상태 =====
 let allWords = [];       // 전체 단어 (건드리지 않음)
 let todayWords = [];     // 오늘의 20단어 (allWords의 부분집합)
-let usedIndices = [];    // todayWords 기준 사용된 인덱스
+let usedIndices = [];
+let currentPos = 0;  // 현재 순서 위치    // todayWords 기준 사용된 인덱스
 let history = [];        // todayWords 기준 방문 인덱스 기록
 let historyPos = -1;
 let nextIdx = null;
@@ -247,11 +250,12 @@ window.handleSheetData = function(data) {
 
     // usedIndices 초기화 후 첫 단어
     usedIndices = [];
+    currentPos = 0;
     history = [];
     historyPos = -1;
     nextIdx = null;
 
-    const firstIdx = getRandomIndex();
+    const firstIdx = getNextIndex();
     showWord(firstIdx, true);
   } catch(e) {
     document.getElementById('status').innerHTML = `<span class="error">❌ 실패: ${e.message}</span>`;
@@ -269,13 +273,10 @@ function loadSheet() {
   }, 10000);
 }
 
-// ===== 랜덤 인덱스 (todayWords 기준) =====
-function getRandomIndex() {
-  if (usedIndices.length >= todayWords.length) usedIndices = [];
-  const remaining = [...Array(todayWords.length).keys()].filter(i => !usedIndices.includes(i));
-  const pool = remaining.length > 0 ? remaining : [...Array(todayWords.length).keys()];
-  const idx = pool[Math.floor(Math.random() * pool.length)];
-  usedIndices.push(idx);
+// ===== 랜덤 인덱스 (todayWords 기준, 순서 고정) =====
+function getNextIndex() {
+  const idx = currentPos % todayWords.length;
+  currentPos++;
   return idx;
 }
 
@@ -449,12 +450,12 @@ function showWord(idx, isInitial) {
   stopTimers(); setSourceLabel('');
   renderWordInfo(todayWords[idx]);
 
-  // 다음 단어 프리로딩 (안전하게 todayWords 범위 확인)
-  nextIdx = getRandomIndex();
-  const nextWord = todayWords[nextIdx];
-  if (nextWord) {
-    preloadWord(nextWord.spelling);
-    if (nextWord.exEn) preloadExample(nextWord.exEn);
+  // 다음 단어 순서대로 프리로딩
+  nextIdx = getNextIndex();
+  const nw = todayWords[nextIdx];
+  if (nw) {
+    preloadWord(nw.spelling);
+    if (nw.exEn) preloadExample(nw.exEn);
   }
 
   if (isPlaying) startPlaySequence(todayWords[idx]);
@@ -473,7 +474,7 @@ function startPlaySequence(w) {
 }
 
 function goToNext() {
-  if (nextIdx===null) nextIdx=getRandomIndex();
+  if (nextIdx===null) nextIdx=getNextIndex();
   showWord(nextIdx, false);
 }
 
