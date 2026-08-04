@@ -27,6 +27,15 @@
 <title>영단어 자동 재생</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
+  .nav-btn {
+    position: fixed; top: 16px; left: 16px;
+    background: #2a1a4a; border: 1px solid #4a2a8a; color: #c9a0ff;
+    border-radius: 20px; padding: 8px 16px; font-size: 12px;
+    cursor: pointer; transition: all 0.2s;
+    display: flex; align-items: center; gap: 6px;
+    text-decoration: none; z-index: 999;
+  }
+  .nav-btn:hover { background: #3a2a6a; color: #fff; }
   body {
     font-family: 'Segoe UI', sans-serif;
     background: #0f0f1a;
@@ -116,7 +125,6 @@
     filter: blur(8px);
     user-select: none;
   }
-  /* 예문 영역 */
   .example-wrap {
     margin-top: 20px;
     width: 100%;
@@ -167,7 +175,6 @@
     0%, 100% { transform: scale(1); }
     50% { transform: scale(1.2); }
   }
-  /* 대기 카운트다운 */
   .countdown {
     font-size: 12px;
     color: #6a5a9a;
@@ -240,7 +247,6 @@
     cursor: pointer;
   }
   .option-row label { cursor: pointer; }
-  /* 대기 시간 슬라이더 */
   .wait-row {
     display: flex;
     align-items: center;
@@ -337,6 +343,7 @@
 </style>
 </head>
 <body>
+<a class="nav-btn" href="word20.html">📅 오늘의 20단어</a>
 <div class="container">
   <div class="status" id="status">스프레드시트 불러오는 중...</div>
 
@@ -399,6 +406,7 @@ let currentVolume = 0.3;
 let waitSeconds = 5;
 let hideMeaning = false;
 let readExample = false;
+let currentAudioEl = null;
 
 // ===== 설정 =====
 function setVolume(val) { currentVolume = val / 100; }
@@ -519,7 +527,6 @@ function testAudioLoadable(url, ms) {
 function preloadWord(word) {
   if (preloadCache[word]) return preloadCache[word];
   preloadCache[word] = (async () => {
-    // 1순위: Dictionary API
     try {
       const res = await fetchWithTimeout(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`, 2500);
       const data = await res.json();
@@ -529,7 +536,6 @@ function preloadWord(word) {
         return { type: 'dict', audioEl: el };
       }
     } catch {}
-    // 2순위: Google TTS 프록시
     const gAudio = await testAudioLoadable(getGoogleTTSUrl(word), 1800);
     if (gAudio) return { type: 'gtts', audioEl: gAudio };
     return { type: 'tts', audioEl: null };
@@ -537,7 +543,6 @@ function preloadWord(word) {
   return preloadCache[word];
 }
 
-// 예문 TTS 프리로딩 (Google TTS 프록시만 사용)
 function preloadExample(text) {
   if (!text) return Promise.resolve(null);
   const key = 'ex:' + text;
@@ -578,21 +583,12 @@ function playBrowserTTS(text, onEnd) {
   } catch { onEnd && onEnd(); }
 }
 
-// 단어 발음 재생 → 완료 콜백
 function playWordAudio(word, onEnd) {
   const icon = document.getElementById('audioIcon');
   if (icon) icon.classList.add('playing');
-
-  const finish = () => {
-    if (icon) icon.classList.remove('playing');
-    onEnd && onEnd();
-  };
-
+  const finish = () => { if (icon) icon.classList.remove('playing'); onEnd && onEnd(); };
   preloadWord(word).then(entry => {
-    if (entry.type === 'tts' || !entry.audioEl) {
-      playBrowserTTS(word, finish);
-      return;
-    }
+    if (entry.type === 'tts' || !entry.audioEl) { playBrowserTTS(word, finish); return; }
     const el = entry.audioEl;
     currentAudioEl = el;
     el.volume = currentVolume;
@@ -605,15 +601,10 @@ function playWordAudio(word, onEnd) {
   }).catch(() => playBrowserTTS(word, finish));
 }
 
-// 예문 TTS 재생 → 완료 콜백
 function playExampleAudio(text, onEnd) {
   const exEl = document.querySelector('.example-en');
   if (exEl) exEl.classList.add('example-playing');
-  const finish = () => {
-    if (exEl) exEl.classList.remove('example-playing');
-    onEnd && onEnd();
-  };
-
+  const finish = () => { if (exEl) exEl.classList.remove('example-playing'); onEnd && onEnd(); };
   preloadExample(text).then(audioEl => {
     if (!audioEl) { playBrowserTTS(text, finish); return; }
     currentAudioEl = audioEl;
@@ -627,19 +618,14 @@ function playExampleAudio(text, onEnd) {
   }).catch(() => playBrowserTTS(text, finish));
 }
 
-// ===== 카운트다운 + 진행 바 (TTS 완료 후 N초) =====
+// ===== 카운트다운 =====
 function startWaitCountdown(onDone) {
   clearInterval(countdownTimer);
   clearTimeout(waitTimer);
-
-  let remaining = waitSeconds;
-  const total = waitSeconds;
   let elapsed = 0;
-
   document.getElementById('progress').style.width = '0%';
-  document.getElementById('countdown').textContent = `다음 단어까지 ${remaining}초`;
+  document.getElementById('countdown').textContent = `다음 단어까지 ${waitSeconds}초`;
 
-  // 뜻 가리기 모드: 카운트다운 시작 시 뜻 공개
   if (hideMeaning) {
     const meaning = document.querySelector('.meaning');
     const exKo = document.querySelector('.example-ko');
@@ -649,10 +635,9 @@ function startWaitCountdown(onDone) {
 
   countdownTimer = setInterval(() => {
     elapsed += 0.1;
-    remaining = Math.max(0, waitSeconds - Math.floor(elapsed));
-    const pct = Math.min(100, (elapsed / total) * 100);
+    const pct = Math.min(100, (elapsed / waitSeconds) * 100);
     document.getElementById('progress').style.width = pct + '%';
-    document.getElementById('countdown').textContent = `다음 단어까지 ${remaining}초`;
+    document.getElementById('countdown').textContent = `다음 단어까지 ${Math.max(0, waitSeconds - Math.floor(elapsed))}초`;
   }, 100);
 
   waitTimer = setTimeout(() => {
@@ -662,8 +647,6 @@ function startWaitCountdown(onDone) {
     onDone && onDone();
   }, waitSeconds * 1000);
 }
-
-let currentAudioEl = null; // 현재 재생 중인 Audio 엘리먼트 추적
 
 function stopAllAudio() {
   window.speechSynthesis?.cancel();
@@ -696,8 +679,7 @@ function adjustSpellingSize() {
   el.style.fontSize = SPELLING_STEPS[i] + 'px';
   el.style.whiteSpace = 'nowrap';
   while (el.scrollWidth > available && i < SPELLING_STEPS.length - 1) {
-    i++;
-    el.style.fontSize = SPELLING_STEPS[i] + 'px';
+    i++; el.style.fontSize = SPELLING_STEPS[i] + 'px';
   }
   if (el.scrollWidth > available) el.style.whiteSpace = 'normal';
 }
@@ -710,7 +692,6 @@ function renderWordInfo(w) {
       <div class="example-en">${w.exEn}</div>
       ${w.exKo ? `<div class="example-ko${hideMeaning ? ' hidden-meaning' : ''}">${w.exKo}</div>` : ''}
     </div>` : '';
-
   document.getElementById('card').innerHTML = `
     <div class="pos-badge">${w.pos || '—'}</div>
     <div class="word-number">#${historyPos + 1} / ${words.length}</div>
@@ -728,37 +709,24 @@ function renderWordInfo(w) {
 function showWord(idx, isInitial) {
   if (isInitial) { history = [idx]; historyPos = 0; }
   else { history = history.slice(0, historyPos + 1); history.push(idx); historyPos = history.length - 1; }
-
   stopTimers();
   setSourceLabel('');
   renderWordInfo(words[idx]);
-
-  // 다음 단어 미리 결정 + 프리로딩
   nextIdx = getRandomIndex();
   preloadWord(words[nextIdx].spelling);
   if (words[nextIdx].exEn) preloadExample(words[nextIdx].exEn);
-
   if (isPlaying) startPlaySequence(words[idx]);
 }
 
-// 재생 순서: 단어 발음 → (예문 TTS) → 카운트다운 → 다음 단어
 function startPlaySequence(w) {
   playWordAudio(w.spelling, () => {
     if (!isPlaying) return;
-
     const afterAll = () => {
       if (!isPlaying) return;
-      startWaitCountdown(() => {
-        if (!isPlaying) return;
-        goToNext();
-      });
+      startWaitCountdown(() => { if (!isPlaying) return; goToNext(); });
     };
-
-    if (readExample && w.exEn) {
-      playExampleAudio(w.exEn, afterAll);
-    } else {
-      afterAll();
-    }
+    if (readExample && w.exEn) playExampleAudio(w.exEn, afterAll);
+    else afterAll();
   });
 }
 

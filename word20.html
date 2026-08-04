@@ -18,6 +18,15 @@
 <title>오늘의 20단어</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
+  .nav-btn {
+    position: fixed; top: 16px; left: 16px;
+    background: #2a1a4a; border: 1px solid #4a2a8a; color: #c9a0ff;
+    border-radius: 20px; padding: 8px 16px; font-size: 12px;
+    cursor: pointer; transition: all 0.2s;
+    display: flex; align-items: center; gap: 6px;
+    text-decoration: none; z-index: 999;
+  }
+  .nav-btn:hover { background: #3a2a6a; color: #fff; }
   body {
     font-family: 'Segoe UI', sans-serif;
     background: #0f0f1a; color: #fff;
@@ -109,6 +118,7 @@
 </style>
 </head>
 <body>
+<a class="nav-btn" href="index.html">🏠 전체 단어</a>
 <div class="container">
   <div class="date-label" id="dateLabel"></div>
   <div class="status" id="status">스프레드시트 불러오는 중...</div>
